@@ -41,22 +41,16 @@ module Flatware
     end
 
     def run(feature_files, options)
-      # TODO: This will eventually stop working.  This ensures step definitions are evaluated on each execution
-      # by using `load` instead of once per Ruby runtime using `require`.
-      #
-      # If we use the same runtime object and reconfigure it on each execution here, the wrong feature files will
-      # be evaluated since their memoized.  Unfortunately, this means there's no straightforward way to both ensure
-      # step definitions are available on every runtime *and* also ensure Cucumber isn't memoizing the feature files
-      # to run.
-      #
-      # For now, the legacy autoloader is the only option to keep everything working properly.
-      ::Cucumber.use_legacy_autoloader ||= true
-
-      runtime(Array(feature_files) + options).run!
+      config = configure(Array(feature_files) + options).config
+      forget_loaded_support_code(config)
+      ::Cucumber::Runtime.new(config).run!
     end
 
-    def runtime(args)
-      ::Cucumber::Runtime.new(configure(args).config)
+    # Each job builds a new Runtime with an empty step registry, but Cucumber loads support code
+    # with `require`, which is a no-op for files a previous job in this process already loaded.
+    def forget_loaded_support_code(config)
+      files = config.all_files_to_load.map { |file| File.expand_path(file) }
+      $LOADED_FEATURES.reject! { |feature| files.include?(feature) }
     end
   end
 end
